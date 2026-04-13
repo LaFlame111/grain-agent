@@ -55,3 +55,13 @@ data/chroma_db/
 release_parts/
 ragflow_docker/
 ragflow_export/
+
+# Server runtime files
+.server.pid
+
+# Generated artifacts (charts, reports) — 运行时生成，不纳入版本控制
+artifacts/
+
+# One-off utility scripts containing hardcoded credentials
+setup_apitoken.py
+get_ragflow_info.py

@@ -21,7 +21,13 @@ logger = logging.getLogger(__name__)
 class LLMResult:
     """LLM 结果封装"""
 
-    def __init__(self, response: str, reasoning: str, tool_calls: Optional[List[Dict]] = None, tool_outputs: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        response: str,
+        reasoning: str,
+        tool_calls: Optional[List[Dict]] = None,
+        tool_outputs: Optional[Dict[str, Any]] = None,
+    ):
         self.response = response
         self.reasoning = reasoning
         self.tool_calls = tool_calls or []
@@ -36,14 +42,20 @@ class LLMService:
         self._client: Optional["OpenAI"] = None
 
         if OpenAI is None:
-            logger.error("OpenAI package not installed. Please run 'pip install openai'.")
-        
+            logger.error(
+                "OpenAI package not installed. Please run 'pip install openai'."
+            )
+
         if not settings.DASHSCOPE_API_KEY:
-            logger.warning("DASHSCOPE_API_KEY is empty. LLM features will be disabled (using mock).")
+            logger.warning(
+                "DASHSCOPE_API_KEY is empty. LLM features will be disabled (using mock)."
+            )
 
         if OpenAI is not None and settings.DASHSCOPE_API_KEY:
             try:
-                logger.info(f"Initializing LLM client with model: {settings.LLM_MODEL}")
+                logger.info(
+                    f"Initializing LLM client with model: {settings.LLM_MODEL}, timeout: {settings.LLM_TIMEOUT}s"
+                )
                 self._client = OpenAI(
                     api_key=settings.DASHSCOPE_API_KEY,
                     base_url=settings.LLM_BASE_URL,
@@ -56,7 +68,9 @@ class LLMService:
                 )
                 self._client = None
 
-    def reason_with_context(self, context: Dict[str, Any], prompt_template: Optional[str] = None) -> Dict[str, Any]:
+    def reason_with_context(
+        self, context: Dict[str, Any], prompt_template: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         V006: 纯推理接口，根据上下文生成结论
         """
@@ -65,27 +79,29 @@ class LLMService:
                 "conclusion": "Mock Conclusion: Based on the data, everything looks fine.",
                 "risk_level": "low",
                 "recommendations": ["Keep monitoring"],
-                "evidence": ["Mock evidence"]
+                "evidence": ["Mock evidence"],
             }
-            
+
         # Construct prompt
         system_prompt = "你是一个专业的粮情分析专家。请根据提供的上下文数据，进行风险评估并给出建议。请以JSON格式返回，包含 conclusion, risk_level, recommendations, evidence 字段。"
-        user_prompt = f"上下文数据:\n{json.dumps(context, ensure_ascii=False, indent=2)}\n"
+        user_prompt = (
+            f"上下文数据:\n{json.dumps(context, ensure_ascii=False, indent=2)}\n"
+        )
         if prompt_template:
             user_prompt += f"\n额外指令: {prompt_template}"
-            
+
         try:
             response = self._client.chat.completions.create(
                 model=settings.LLM_MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
+                    {"role": "user", "content": user_prompt},
                 ],
                 # response_format={"type": "json_object"}, # Uncomment if model supports it
                 temperature=0.3,
-                timeout=30.0,  # 30秒超时
+                timeout=settings.LLM_TIMEOUT,
             )
-            content = response.choices[0].message.content
+            content = self._extract_content(response.choices[0].message)
             # Parse JSON
             try:
                 # Try to find JSON block if wrapped in markdown
@@ -99,7 +115,7 @@ class LLMService:
                     "conclusion": content,
                     "risk_level": "unknown",
                     "recommendations": [],
-                    "evidence": []
+                    "evidence": [],
                 }
         except Exception as e:
             logger.error(f"LLM reasoning failed: {e}")
@@ -107,10 +123,12 @@ class LLMService:
                 "conclusion": f"Error during reasoning: {str(e)}",
                 "risk_level": "unknown",
                 "recommendations": [],
-                "evidence": []
+                "evidence": [],
             }
 
-    def analyze(self, query: str, context: Optional[Dict[str, Any]] = None) -> LLMResult:
+    def analyze(
+        self, query: str, context: Optional[Dict[str, Any]] = None
+    ) -> LLMResult:
         """基于分析/巡检/对比结果生成储藏建议。
 
         优先调用真实云端大模型（qwen-max 等），在以下情况回退到本地 Mock：
@@ -130,19 +148,20 @@ class LLMService:
             return self._analyze_mock(query, context)
 
     def chat_with_tools(
-        self, 
-        messages: List[Dict[str, Any]], 
-        tools: Optional[List[Dict]] = None, 
-        tool_map: Optional[Dict[str, Any]] = None
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict]] = None,
+        tool_map: Optional[Dict[str, Any]] = None,
     ) -> LLMResult:
         """
         支持 Function Calling 的对话接口
-        
+
         Args:
             messages: 对话历史
             tools: 工具定义列表 (JSON Schema)
             tool_map: 工具函数映射 {name: function}
         """
+
         def get_msg_field(msg, field):
             if isinstance(msg, dict):
                 return msg.get(field)
@@ -150,7 +169,14 @@ class LLMService:
 
         if self._client is None:
             # Fallback to mock if no client
-            last_user_msg = next((get_msg_field(m, "content") for m in reversed(messages) if get_msg_field(m, "role") == "user"), "")
+            last_user_msg = next(
+                (
+                    get_msg_field(m, "content")
+                    for m in reversed(messages)
+                    if get_msg_field(m, "role") == "user"
+                ),
+                "",
+            )
             return self._analyze_mock(str(last_user_msg))
 
         executed_tool_calls: List[Dict[str, Any]] = []
@@ -163,7 +189,7 @@ class LLMService:
 
             while True:
                 round_idx += 1
-                
+
                 try:
                     response = self._client.chat.completions.create(  # type: ignore
                         model=settings.LLM_MODEL,
@@ -171,17 +197,17 @@ class LLMService:
                         tools=tools,
                         tool_choice="auto" if tools else None,
                         temperature=0.3,
-                        timeout=30.0,  # 30秒超时
+                        timeout=settings.LLM_TIMEOUT,
                     )
                 except Exception as e:
                     raise
-                
+
                 response_message = response.choices[0].message
                 tool_calls = response_message.tool_calls
-                
+
                 # If no tool calls, return the response
                 if not tool_calls:
-                    content = response_message.content or ""
+                    content = self._extract_content(response_message)
                     answer, reasoning = self._parse_answer_and_reasoning(content)
                     return LLMResult(
                         response=answer,
@@ -189,67 +215,92 @@ class LLMService:
                         tool_calls=executed_tool_calls,
                         tool_outputs=executed_tool_outputs,
                     )
-                
+
                 # Handle tool calls
-                messages.append(response_message) 
-                
+                messages.append(response_message)
+
                 for tool_call in tool_calls:
                     function_name = tool_call.function.name
                     try:
                         function_args = json.loads(tool_call.function.arguments)
                     except json.JSONDecodeError:
-                        logger.warning(f"Failed to parse tool arguments: {tool_call.function.arguments}")
+                        logger.warning(
+                            f"Failed to parse tool arguments: {tool_call.function.arguments}"
+                        )
                         function_args = {}
-                    
-                    executed_tool_calls.append({"tool": function_name, "params": function_args})
-                    logger.info(f"Executing tool: {function_name} with args: {function_args}")
-                    
+
+                    executed_tool_calls.append(
+                        {"tool": function_name, "params": function_args}
+                    )
+                    logger.info(
+                        f"Executing tool: {function_name} with args: {function_args}"
+                    )
+
                     if tool_map and function_name in tool_map:
                         tool_function = tool_map[function_name]
                         try:
                             function_response = tool_function(**function_args)
-                            content_str = json.dumps(function_response, ensure_ascii=False)
+                            content_str = json.dumps(
+                                function_response, ensure_ascii=False
+                            )
                             executed_tool_outputs[function_name] = function_response
                         except Exception as e:
-                            content_str = json.dumps({"error": str(e)}, ensure_ascii=False)
+                            content_str = json.dumps(
+                                {"error": str(e)}, ensure_ascii=False
+                            )
                             executed_tool_outputs[function_name] = {"error": str(e)}
                     else:
-                        content_str = json.dumps({"error": "tool_not_found"}, ensure_ascii=False)
-                        executed_tool_outputs[function_name] = {"error": "tool_not_found"}
-                    
-                    messages.append({
-                        "tool_call_id": tool_call.id,
-                        "role": "tool",
-                        "name": function_name,
-                        "content": content_str,
-                    })
-                
+                        content_str = json.dumps(
+                            {"error": "tool_not_found"}, ensure_ascii=False
+                        )
+                        executed_tool_outputs[function_name] = {
+                            "error": "tool_not_found"
+                        }
+
+                    messages.append(
+                        {
+                            "tool_call_id": tool_call.id,
+                            "role": "tool",
+                            "name": function_name,
+                            "content": content_str,
+                        }
+                    )
+
                 # 超出轮次限制则直接让模型给最终回答（不再允许 tools）
                 if round_idx >= max_rounds:
                     final_resp = self._client.chat.completions.create(  # type: ignore
                         model=settings.LLM_MODEL,
                         messages=messages,
                         temperature=0.3,
-                        timeout=30.0,  # 30秒超时
+                        timeout=settings.LLM_TIMEOUT,
                     )
-                    content = final_resp.choices[0].message.content or ""
+                    content = self._extract_content(final_resp.choices[0].message)
                     answer, reasoning = self._parse_answer_and_reasoning(content)
                     return LLMResult(
-                        response=answer, 
+                        response=answer,
                         reasoning=reasoning,
                         tool_calls=executed_tool_calls,
                         tool_outputs=executed_tool_outputs,
                     )
-            
+
         except Exception as e:
             logger.error(f"LLM chat failed: {e}")
             # Fallback to mock on error
-            last_user_msg = next((get_msg_field(m, "content") for m in reversed(messages) if get_msg_field(m, "role") == "user"), "")
+            last_user_msg = next(
+                (
+                    get_msg_field(m, "content")
+                    for m in reversed(messages)
+                    if get_msg_field(m, "role") == "user"
+                ),
+                "",
+            )
             return self._analyze_mock(str(last_user_msg))
 
     # === 云端 LLM 实现 ===
 
-    def _analyze_with_llm(self, query: str, context: Optional[Dict[str, Any]]) -> LLMResult:
+    def _analyze_with_llm(
+        self, query: str, context: Optional[Dict[str, Any]]
+    ) -> LLMResult:
         """调用云端大模型（OpenAI 兼容接口）生成回答。"""
 
         assert self._client is not None  # 为类型检查器提供保证
@@ -260,30 +311,30 @@ class LLMService:
             model=settings.LLM_MODEL,
             messages=messages,
             temperature=0.3,
-            timeout=30.0,  # 30秒超时
+            timeout=settings.LLM_TIMEOUT,
         )
 
-        content = completion.choices[0].message.content or ""
+        content = self._extract_content(completion.choices[0].message)
         answer, reasoning = self._parse_answer_and_reasoning(content)
         return LLMResult(response=answer, reasoning=reasoning)
 
-    def _build_messages(self, query: str, context: Optional[Dict[str, Any]]) -> List[Dict[str, str]]:
+    def _build_messages(
+        self, query: str, context: Optional[Dict[str, Any]]
+    ) -> List[Dict[str, str]]:
         """构造对话消息，包含 System Prompt 和上下文。"""
 
         system_prompt = (
-            "你是一个严谨的粮情分析智能体，擅长根据传感器数据、分析结果和对比结果，" 
+            "你是一个严谨的粮情分析智能体，擅长根据传感器数据、分析结果和对比结果，"
             "判断粮仓是否存在温度、湿度等风险并给出操作建议。\n"
             "- 必须严格基于提供的上下文数据进行分析，不要编造数据或凭空假设。\n"
             "- 如果信息不足以得出结论，要明确说明'不足以判断'，并说明还需要哪些数据。\n"
             "- **必须给出推理依据**：在 reasoning 字段中详细说明分析过程、判断依据、风险评估的逻辑链条，不能省略。\n"
             "- 语言风格：专业但易懂，用简洁的中文给出结论和可执行建议。\n"
             "- 输出格式：只输出 JSON，不要添加任何多余文字或 Markdown。"
-            "形如：{\"answer\": \"...\", \"reasoning\": \"...\"}"
+            '形如：{"answer": "...", "reasoning": "..."}'
         )
 
-        messages: List[Dict[str, str]] = [
-            {"role": "system", "content": system_prompt}
-        ]
+        messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
 
         if context:
             context_text = self._format_context(context)
@@ -291,7 +342,7 @@ class LLMService:
                 {
                     "role": "user",
                     "content": (
-                        "以下是与本次查询相关的结构化数据（JSON）：\n" f"{context_text}"
+                        f"以下是与本次查询相关的结构化数据（JSON）：\n{context_text}"
                     ),
                 }
             )
@@ -334,6 +385,33 @@ class LLMService:
             # 最保险的降级：退回到字符串表示
             return str(safe_context)
 
+    def _extract_content(self, message: Any) -> str:
+        """从模型消息中提取文本内容，兼容 thinking 模型（reasoning_content）。
+
+        部分本地 thinking 模型（如 Qwen3 thinking mode）会将推理过程放入
+        `reasoning_content` 字段，而 `content` 为空字符串。此方法统一处理这两种情况：
+        - 优先返回 message.content（标准字段）
+        - 若 content 为空，尝试从 model_extra / __dict__ 读取 reasoning_content
+        """
+        # 标准字段
+        content = getattr(message, "content", None) or ""
+        if content:
+            return content
+
+        # thinking 模型：reasoning_content 可能在 model_extra 里
+        extra = getattr(message, "model_extra", None) or {}
+        reasoning = extra.get("reasoning_content", "")
+        if reasoning:
+            logger.debug(
+                "content 为空，使用 reasoning_content 作为回答内容（thinking 模型）"
+            )
+            return reasoning
+
+        # 兜底：尝试 __dict__
+        raw = getattr(message, "__dict__", {})
+        reasoning = raw.get("reasoning_content", "")
+        return reasoning or ""
+
     def _parse_answer_and_reasoning(self, content: str) -> tuple[str, str]:
         """从模型返回的文本中解析出 answer 和 reasoning。"""
 
@@ -372,19 +450,21 @@ class LLMService:
         try:
             # 尝试解析 JSON
             data = json.loads(extracted)
-            
+
             # 使用 Pydantic 进行校验
             try:
                 validated_data = LLMStructuredResponse(**data)
                 return (validated_data.answer, validated_data.reasoning)
             except Exception as e:
-                logger.warning(f"LLM output validation failed: {e}. Fallback to loose parsing.")
+                logger.warning(
+                    f"LLM output validation failed: {e}. Fallback to loose parsing."
+                )
                 # 降级：宽松解析
                 answer = str(data.get("answer", "")).strip()
                 reasoning = str(data.get("reasoning", "")).strip()
                 if answer or reasoning:
                     return (answer or reasoning, reasoning)
-                    
+
         except Exception:
             # 如果不是合法 JSON，则整体作为 answer 返回
             pass
@@ -422,18 +502,20 @@ class LLMService:
             reasoning="Mock LLM 推理过程",
         )
 
-    def _generate_storage_advice(self, query: str, analysis: AnalysisResult) -> LLMResult:
+    def _generate_storage_advice(
+        self, query: str, analysis: AnalysisResult
+    ) -> LLMResult:
         """根据分析结果生成储藏建议"""
-        
+
         silo_id = analysis.silo_id
         score = analysis.score
         findings = analysis.findings
-        
+
         # 构建响应
         response_parts = []
         response_parts.append(f"📊 {silo_id}号仓粮情分析报告\n")
         response_parts.append(f"综合评分: {score:.1f}/100\n")
-        
+
         # 根据评分判断风险等级
         if score >= 90:
             risk_level = "低风险 ✓"
@@ -444,18 +526,18 @@ class LLMService:
         else:
             risk_level = "高风险 ⚠️⚠️"
             status_emoji = "🔴"
-        
+
         response_parts.append(f"风险等级: {status_emoji} {risk_level}\n")
         response_parts.append("\n📋 主要发现:")
         for finding in findings:
             response_parts.append(f"  {finding}")
-        
+
         # 生成建议
         response_parts.append("\n💡 储藏建议:")
         recommendations = self._generate_recommendations(score, findings)
         for rec in recommendations:
             response_parts.append(f"  {rec}")
-        
+
         # 构建推理过程
         reasoning_parts = []
         reasoning_parts.append("分析依据:")
@@ -464,87 +546,92 @@ class LLMService:
         reasoning_parts.append("   - 是否存在热点（局部高温）")
         reasoning_parts.append("   - 温度分布均匀性（标准差）")
         reasoning_parts.append("   - 湿度水平")
-        reasoning_parts.append(f"2. 检测到 {len([f for f in findings if '热点' in f or '🔥' in f])} 个潜在问题")
-        reasoning_parts.append("3. 建议基于粮食储藏国家标准和最佳实践")
-        
-        return LLMResult(
-            response="\n".join(response_parts),
-            reasoning="\n".join(reasoning_parts)
+        reasoning_parts.append(
+            f"2. 检测到 {len([f for f in findings if '热点' in f or '🔥' in f])} 个潜在问题"
         )
-    
+        reasoning_parts.append("3. 建议基于粮食储藏国家标准和最佳实践")
+
+        return LLMResult(
+            response="\n".join(response_parts), reasoning="\n".join(reasoning_parts)
+        )
+
     def _generate_recommendations(self, score: float, findings: List[str]) -> List[str]:
         """根据评分和发现生成具体建议"""
         recommendations = []
-        
+
         findings_text = " ".join(findings)
-        
+
         # 检查热点问题
         if "热点" in findings_text or "🔥" in findings_text or "危险" in findings_text:
             recommendations.append("🌡️ 立即启动通风系统，降低仓内温度")
             recommendations.append("🔄 对热点区域进行重点监控，每2小时检查一次")
             recommendations.append("📍 考虑对热点区域进行翻仓处理")
-        
+
         # 检查温度偏高
         if "偏高" in findings_text or "警告" in findings_text:
             recommendations.append("🌬️ 增加通风频次，建议夜间通风降温")
             recommendations.append("📊 加密温度监测频率，从每小时改为每30分钟")
-        
+
         # 检查温度不均匀
         if "不均匀" in findings_text:
             recommendations.append("🔀 检查通风系统是否正常，确保气流均匀分布")
             recommendations.append("🔍 排查是否存在局部粮堆密实或通风死角")
-        
+
         # 检查湿度问题
         if "湿度" in findings_text and "偏高" in findings_text:
             recommendations.append("💨 加强除湿措施，可使用除湿机或干燥通风")
             recommendations.append("🦠 注意防霉，定期检查粮食表面状况")
-        
+
         # 如果评分很高，给予正面建议
         if score >= 90:
             recommendations.append("✅ 当前储藏状况良好，继续保持现有管理措施")
             recommendations.append("📅 建议每日例行巡检，确保粮情稳定")
-        
+
         # 如果没有具体建议，给出通用建议
         if not recommendations:
             recommendations.append("📋 继续按照标准流程进行日常监测")
             recommendations.append("🔔 如发现异常变化，及时采取应对措施")
-        
+
         return recommendations
-    
-    def _generate_inspection_summary(self, query: str, inspection: Dict[str, Any]) -> LLMResult:
+
+    def _generate_inspection_summary(
+        self, query: str, inspection: Dict[str, Any]
+    ) -> LLMResult:
         """生成巡检总结"""
         total = inspection.get("total_silos", 0)
         abnormal = inspection.get("abnormal_silos", 0)
         issues = inspection.get("issues", [])
-        
+
         response_parts = []
         response_parts.append(f"📋 全库巡检报告\n")
         response_parts.append(f"检查仓数: {total}")
         response_parts.append(f"异常仓数: {abnormal}\n")
-        
+
         if issues:
             response_parts.append("⚠️ 发现以下问题:")
             for issue in issues:
                 severity_emoji = "🔴" if issue["severity"] == "danger" else "🟡"
-                response_parts.append(f"  {severity_emoji} {issue['silo_id']}: {issue['issue']}")
+                response_parts.append(
+                    f"  {severity_emoji} {issue['silo_id']}: {issue['issue']}"
+                )
         else:
             response_parts.append("✅ 所有粮仓状况正常")
-        
+
         return LLMResult(
             response="\n".join(response_parts),
-            reasoning=f"基于对{total}个仓的巡检数据分析"
+            reasoning=f"基于对{total}个仓的巡检数据分析",
         )
-    
-    def _generate_comparison_summary(self, query: str, comparison: Dict[str, Any]) -> LLMResult:
+
+    def _generate_comparison_summary(
+        self, query: str, comparison: Dict[str, Any]
+    ) -> LLMResult:
         """生成对比总结"""
         summary = comparison.get("summary", "")
-        
+
         response_parts = []
         response_parts.append(f"📊 对比分析结果\n")
         response_parts.append(summary)
-        
-        return LLMResult(
-            response="\n".join(response_parts),
-            reasoning="基于多个数据源的对比分析"
-        )
 
+        return LLMResult(
+            response="\n".join(response_parts), reasoning="基于多个数据源的对比分析"
+        )

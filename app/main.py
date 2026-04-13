@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from app.core.config import settings
 from app.api.v1.api import api_router
 import time
@@ -29,31 +30,44 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # 允许所有来源（开发环境）
-    allow_credentials=True,
+    allow_credentials=False,  # 不使用 cookie，无需 credentials
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
     request_id = str(uuid.uuid4())
     start_time = time.time()
-    
+
     logger.info(f"Request started: {request.method} {request.url} [ID: {request_id}]")
-    
+
     try:
         response = await call_next(request)
-        
+
         process_time = time.time() - start_time
         response.headers["X-Process-Time"] = str(process_time)
         response.headers["X-Request-ID"] = request_id
-        
-        logger.info(f"Request completed: {request.method} {request.url} [ID: {request_id}] - Took {process_time:.4f}s")
-        
+
+        logger.info(
+            f"Request completed: {request.method} {request.url} [ID: {request_id}] - Took {process_time:.4f}s"
+        )
+
         return response
     except Exception as e:
         logger.error(f"Request failed: {e}", exc_info=True)
         raise
+
+
+@app.get("/ui", include_in_schema=False)
+def serve_ui():
+    """提供测试前端界面（避免 file:// CORS 问题）"""
+    ui_path = os.path.join(
+        os.path.dirname(__file__), "..", "frontend", "test_ui", "index.html"
+    )
+    return FileResponse(ui_path, media_type="text/html")
+
 
 @app.get("/")
 def read_root():
@@ -65,8 +79,9 @@ def read_root():
         "docs_enabled": settings.DEBUG or settings.EXPOSE_DOCS,
         "docs_url": "/docs" if (settings.DEBUG or settings.EXPOSE_DOCS) else None,
         "llm_status": "configured" if settings.DASHSCOPE_API_KEY else "missing_key",
-        "key_len": len(settings.DASHSCOPE_API_KEY) if settings.DASHSCOPE_API_KEY else 0
+        "key_len": len(settings.DASHSCOPE_API_KEY) if settings.DASHSCOPE_API_KEY else 0,
     }
+
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
@@ -77,5 +92,6 @@ if not os.path.exists(artifacts_path):
 app.mount("/artifacts", StaticFiles(directory=artifacts_path), name="artifacts")
 
 # 启动时日志
-logger.info(f"FastAPI app initialized. DEBUG={settings.DEBUG}, EXPOSE_DOCS={settings.EXPOSE_DOCS}")
-
+logger.info(
+    f"FastAPI app initialized. DEBUG={settings.DEBUG}, EXPOSE_DOCS={settings.EXPOSE_DOCS}"
+)

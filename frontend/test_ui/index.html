@@ -1,230 +1,544 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>粮情分析智能体 V008 - 交互测试终端</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        .chat-container { height: calc(100vh - 180px); }
-        .reasoning-container { height: calc(50vh - 60px); }
-        .tools-container { height: calc(50vh - 60px); }
-        .scrollbar-hide::-webkit-scrollbar { display: none; }
-        .code-block { font-family: 'Consolas', 'Monaco', monospace; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>粮情分析智能体 V010 — 测试界面</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+    /* ── Nav ── */
+    .nav {
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      padding: 10px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .nav-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #f1f5f9;
+      letter-spacing: 0.01em;
+    }
+    .nav-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #64748b;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #64748b;
+      transition: background 0.3s;
+      flex-shrink: 0;
+    }
+    .status-dot.online  { background: #22c55e; }
+    .status-dot.offline { background: #ef4444; }
+    #status-text { transition: color 0.3s; }
+    #status-text.online  { color: #22c55e; }
+    #status-text.offline { color: #ef4444; }
+
+    /* ── Layout ── */
+    .layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* ── Chat panel ── */
+    .chat-panel {
+      flex: 3;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #334155;
+    }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .msg-wrap {
+      display: flex;
+      flex-direction: column;
+    }
+    .msg-wrap.user  { align-items: flex-end; }
+    .msg-wrap.agent { align-items: flex-start; }
+
+    .bubble {
+      max-width: 78%;
+      padding: 10px 14px;
+      font-size: 14px;
+      line-height: 1.65;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    .bubble.user {
+      background: #2563eb;
+      color: #fff;
+      border-radius: 14px 14px 2px 14px;
+    }
+    .bubble.agent {
+      background: #1e293b;
+      color: #e2e8f0;
+      border-radius: 14px 14px 14px 2px;
+      border: 1px solid #334155;
+    }
+
+    .file-btn {
+      margin-top: 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #15803d;
+      color: #dcfce7;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s;
+    }
+    .file-btn:hover { background: #16a34a; }
+
+    .thinking {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      padding: 10px 14px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 14px 14px 14px 2px;
+      align-self: flex-start;
+    }
+    .thinking span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #475569;
+      animation: blink 1.2s infinite ease-in-out;
+    }
+    .thinking span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink {
+      0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+      40%           { opacity: 1;   transform: scale(1); }
+    }
+
+    /* ── Input area ── */
+    .input-area {
+      padding: 12px 16px;
+      border-top: 1px solid #334155;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+      background: #0f172a;
+    }
+
+    .quick-btns {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .quick-btn {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #94a3b8;
+      padding: 5px 11px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      font-family: inherit;
+    }
+    .quick-btn:hover:not(:disabled) {
+      background: #334155;
+      color: #e2e8f0;
+      border-color: #475569;
+    }
+    .quick-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+    }
+    .input-row input {
+      flex: 1;
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #e2e8f0;
+      padding: 9px 13px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .input-row input::placeholder { color: #475569; }
+    .input-row input:focus { border-color: #3b82f6; }
+    .input-row input:disabled { opacity: 0.5; }
+
+    .send-btn {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      padding: 9px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .send-btn:hover:not(:disabled) { background: #1d4ed8; }
+    .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Debug panel ── */
+    .debug-panel {
+      flex: 2;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .debug-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+    }
+    .debug-section + .debug-section {
+      border-top: 1px solid #334155;
+    }
+
+    .debug-header {
+      padding: 8px 14px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      flex-shrink: 0;
+      background: #0a1628;
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .debug-header.tools    { color: #34d399; }
+    .debug-header.reasoning { color: #60a5fa; }
+
+    .debug-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 14px;
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.65;
+    }
+    .debug-body.tools-body    { color: #6ee7b7; }
+    .debug-body.reasoning-body { color: #93c5fd; white-space: pre-wrap; }
+
+    .placeholder-text {
+      color: #334155;
+      font-style: italic;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+
+    .tool-entry {
+      margin-bottom: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .tool-entry:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .tool-name   { color: #34d399; font-weight: 600; margin-bottom: 4px; }
+    .tool-params { color: #64748b; font-size: 11px; white-space: pre-wrap; word-break: break-all; }
+  </style>
 </head>
-<body class="bg-gray-100 font-sans leading-normal tracking-normal">
+<body>
 
-    <!-- Header -->
-    <nav class="bg-blue-800 p-4 shadow-lg">
-        <div class="container mx-auto flex justify-between items-center">
-            <div class="text-white font-bold text-xl flex items-center">
-                <span class="mr-2">🌾</span> 粮情分析智能体 V008 终端
-            </div>
-            <div class="text-blue-200 text-sm">
-                后端状态: <span id="server-status" class="text-green-400">正在检查...</span>
-            </div>
+  <!-- Nav -->
+  <div class="nav">
+    <div class="nav-title">🌾 粮情分析智能体 V010</div>
+    <div class="nav-status">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status-text">正在检查...</span>
+    </div>
+  </div>
+
+  <!-- Layout -->
+  <div class="layout">
+
+    <!-- Chat -->
+    <div class="chat-panel">
+      <div class="messages" id="messages">
+        <div class="msg-wrap agent">
+          <div class="bubble agent">你好！我是粮情分析智能体 V010。请问有什么可以帮你？</div>
         </div>
-    </nav>
+      </div>
 
-    <div class="container mx-auto flex flex-col md:flex-row p-4 gap-4">
-        
-        <!-- Left: Chat Area -->
-        <div class="w-full md:w-3/5 flex flex-col gap-4">
-            <div class="bg-white rounded-lg shadow-md p-4 chat-container flex flex-col">
-                <div id="chat-messages" class="flex-grow overflow-y-auto mb-4 space-y-4 p-2">
-                    <!-- Welcome Message -->
-                    <div class="flex items-start">
-                        <div class="bg-blue-100 text-blue-800 p-3 rounded-lg max-w-xs md:max-w-md shadow-sm">
-                            你好！我是粮情分析智能体 V008。我已经连接到了 WMS 真实接口。你可以询问我关于仓房清单、粮情数据、趋势预测或生成报告。
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Input Area -->
-                <div class="flex items-center gap-2 border-t pt-4">
-                    <input type="text" id="user-input" 
-                        class="flex-grow border rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" 
-                        placeholder="输入您的问题，例如：查询 Q1 仓的基本情况...">
-                    <button id="send-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full transition duration-200 flex items-center gap-1">
-                        发送
-                        <span id="loading-spinner" class="hidden animate-spin">⏳</span>
-                    </button>
-                </div>
-            </div>
+      <div class="input-area">
+        <div class="quick-btns">
+          <button class="quick-btn" onclick="sendQuery('我想了解当前连接的仓房列表。')">🔍 接入清单</button>
+          <button class="quick-btn" onclick="sendQuery('我想了解 Q1 仓的基本情况。')">🏠 Q1 详情</button>
+          <button class="quick-btn" onclick="sendQuery('请为 Q1 仓生成一份 2026年1月1日到5日 的三温图。')">📈 Q1 三温图</button>
+          <button class="quick-btn" onclick="sendQuery('请为 Q1 仓生成一份 2026年1月1日到5日 的分析报告文档。')">📄 生成分析报告</button>
         </div>
-
-        <!-- Right: Details Area -->
-        <div class="w-full md:w-2/5 flex flex-col gap-4">
-            
-            <!-- Quick Actions -->
-            <div class="bg-white rounded-lg shadow-md p-4">
-                <h3 class="font-bold text-gray-700 mb-3 flex items-center border-b pb-2">
-                    <span class="mr-2">⚡</span> 快捷指令集
-                </h3>
-                <div class="grid grid-cols-2 gap-2">
-                    <button onclick="sendQuery('我想了解当前连接的仓房列表。')" class="text-sm bg-gray-100 hover:bg-blue-50 border border-gray-200 p-2 rounded text-left truncate transition">🔍 接入清单</button>
-                    <button onclick="sendQuery('我想了解 Q1 仓的基本情况。')" class="text-sm bg-gray-100 hover:bg-blue-50 border border-gray-200 p-2 rounded text-left truncate transition">🏠 Q1 详情</button>
-                    <button onclick="sendQuery('请为 Q1 仓生成一份 2026年1月1日到5日 的三温图。')" class="text-sm bg-gray-100 hover:bg-blue-50 border border-gray-200 p-2 rounded text-left truncate transition">📈 Q1 三温图</button>
-                    <button onclick="sendQuery('请为 Q1 仓生成一份 2026年1月1日到5日 的分析报告文档。')" class="text-sm bg-gray-100 hover:bg-blue-50 border border-gray-200 p-2 rounded text-left truncate transition">📄 分析文档生成</button>
-                </div>
-            </div>
-
-            <!-- Reasoning -->
-            <div class="bg-gray-900 rounded-lg shadow-md p-4 reasoning-container overflow-hidden flex flex-col">
-                <h3 class="font-bold text-blue-400 mb-2 flex items-center border-b border-gray-700 pb-1 italic">
-                    <span class="mr-2">🧠</span> 推理思维链 (Reasoning)
-                </h3>
-                <div id="reasoning-text" class="text-gray-300 text-sm overflow-y-auto whitespace-pre-wrap flex-grow scrollbar-hide">
-                    等待对话开始...
-                </div>
-            </div>
-
-            <!-- Tools -->
-            <div class="bg-gray-800 rounded-lg shadow-md p-4 tools-container overflow-hidden flex flex-col">
-                <h3 class="font-bold text-green-400 mb-2 flex items-center border-b border-gray-700 pb-1 italic">
-                    <span class="mr-2">🛠️</span> 工具调用记录 (Tools)
-                </h3>
-                <div id="tools-data" class="text-green-300 text-xs overflow-y-auto flex-grow code-block scrollbar-hide">
-                    暂无调用记录
-                </div>
-            </div>
+        <div class="input-row">
+          <input
+            type="text"
+            id="user-input"
+            placeholder="输入问题，例如：查询 Q1 仓近7天的温度变化趋势…"
+            autocomplete="off"
+          />
+          <button class="send-btn" id="send-btn" onclick="sendQuery()">发送</button>
         </div>
+      </div>
     </div>
 
-    <script>
-        const chatMessages = document.getElementById('chat-messages');
-        const userInput = document.getElementById('user-input');
-        const sendBtn = document.getElementById('send-btn');
-        const loadingSpinner = document.getElementById('loading-spinner');
-        const reasoningText = document.getElementById('reasoning-text');
-        const toolsData = document.getElementById('tools-data');
-        const serverStatus = document.getElementById('server-status');
+    <!-- Debug -->
+    <div class="debug-panel">
+      <div class="debug-section">
+        <div class="debug-header tools">🛠 工具调用</div>
+        <div class="debug-body tools-body" id="tools-body">
+          <span class="placeholder-text">暂无调用记录</span>
+        </div>
+      </div>
+      <div class="debug-section">
+        <div class="debug-header reasoning">🧠 推理链</div>
+        <div class="debug-body reasoning-body" id="reasoning-body">
+          <span class="placeholder-text">等待对话开始…</span>
+        </div>
+      </div>
+    </div>
 
-        const API_URL = 'http://127.0.0.1:8000/api/v1/agent/chat';
+  </div>
 
-        // 检查服务器状态
-        async function checkServer() {
-            try {
-                const response = await fetch('http://127.0.0.1:8000/', { timeout: 2000 });
-                if (response.ok) {
-                    serverStatus.textContent = '在线';
-                    serverStatus.className = 'text-green-400 font-bold';
-                } else {
-                    serverStatus.textContent = '离线';
-                    serverStatus.className = 'text-red-400 font-bold';
-                }
-            } catch (e) {
-                serverStatus.textContent = '无法连接';
-                serverStatus.className = 'text-red-400 font-bold';
-            }
+  <script>
+    // 相对路径：通过 http://127.0.0.1:8000/ui 访问时自动指向同一后端
+    // 如需直接用 file:// 打开，请改为绝对路径 http://127.0.0.1:8000/...
+    const API_URL = '/api/v1/agent/chat';
+    const HEALTH_URL = '/';
+
+    const messagesEl  = document.getElementById('messages');
+    const inputEl     = document.getElementById('user-input');
+    const sendBtn     = document.getElementById('send-btn');
+    const toolsBody   = document.getElementById('tools-body');
+    const reasoningBody = document.getElementById('reasoning-body');
+    const statusDot   = document.getElementById('status-dot');
+    const statusText  = document.getElementById('status-text');
+
+    // ── Backend health check ──────────────────────────────────
+    async function checkHealth() {
+      try {
+        const res = await fetch(HEALTH_URL, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          statusDot.className  = 'status-dot online';
+          statusText.className = 'online';
+          statusText.textContent = '后端在线';
+        } else { setOffline(); }
+      } catch { setOffline(); }
+    }
+    function setOffline() {
+      statusDot.className  = 'status-dot offline';
+      statusText.className = 'offline';
+      statusText.textContent = '后端离线';
+    }
+    checkHealth();
+    setInterval(checkHealth, 10000);
+
+    // ── Helpers ───────────────────────────────────────────────
+    function setLoading(on) {
+      sendBtn.disabled = on;
+      inputEl.disabled = on;
+      document.querySelectorAll('.quick-btn').forEach(b => b.disabled = on);
+      sendBtn.textContent = on ? '发送中…' : '发送';
+    }
+
+    function scrollToBottom() {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function appendMsg(role, text) {
+      const wrap   = document.createElement('div');
+      wrap.className = `msg-wrap ${role}`;
+      const bubble = document.createElement('div');
+      bubble.className = `bubble ${role}`;
+      bubble.textContent = text;
+      wrap.appendChild(bubble);
+      messagesEl.appendChild(wrap);
+      scrollToBottom();
+      return bubble;
+    }
+
+    function appendThinking() {
+      const wrap = document.createElement('div');
+      wrap.className = 'msg-wrap agent';
+      wrap.id = 'thinking-indicator';
+      wrap.innerHTML = `<div class="thinking"><span></span><span></span><span></span></div>`;
+      messagesEl.appendChild(wrap);
+      scrollToBottom();
+    }
+
+    function removeThinking() {
+      const el = document.getElementById('thinking-indicator');
+      if (el) el.remove();
+    }
+
+    function renderAgentMsg(data) {
+      const wrap   = document.createElement('div');
+      wrap.className = 'msg-wrap agent';
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble agent';
+      bubble.textContent = data.answer || '（无回复）';
+
+      // 文件下载按钮
+      const filePath = extractFilePath(data);
+      if (filePath) {
+        const relPath = toRelativePath(filePath);
+        if (relPath) {
+          const btn = document.createElement('a');
+          btn.className = 'file-btn';
+          btn.href = `http://127.0.0.1:8000${relPath}`;
+          btn.target = '_blank';
+          btn.textContent = '📥 下载生成的文件';
+          bubble.appendChild(btn);
         }
-        checkServer();
-        setInterval(checkServer, 10000);
+      }
 
-        function appendMessage(role, text, data = null) {
-            const wrapper = document.createElement('div');
-            wrapper.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'} mb-4`;
-            
-            const div = document.createElement('div');
-            div.className = `p-3 rounded-lg max-w-xs md:max-w-md shadow-sm ${
-                role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-gray-200 text-gray-800 rounded-bl-none'
-            }`;
-            
-            // 处理文本中的换行
-            const content = document.createElement('div');
-            content.className = "whitespace-pre-wrap";
-            content.textContent = text;
-            div.appendChild(content);
+      wrap.appendChild(bubble);
+      messagesEl.appendChild(wrap);
+      scrollToBottom();
+    }
 
-            // 如果有数据且包含文件路径，尝试生成下载按钮
-            if (data && data.tool_calls) {
-                data.tool_calls.forEach(call => {
-                    const result = data.raw_results ? data.raw_results[call.tool] : null;
-                    if (result && result.file_path) {
-                        const filePath = result.file_path;
-                        // 将绝对路径转换为相对路径
-                        // 示例: G:\grain_agent\V008\artifacts\reports\xxx.docx -> /artifacts/reports/xxx.docx
-                        let relativePath = "";
-                        if (filePath.includes('artifacts')) {
-                            relativePath = '/artifacts' + filePath.split('artifacts')[1].replace(/\\/g, '/');
-                        }
+    function extractFilePath(data) {
+      if (!data.raw_results) return null;
+      for (const key of Object.keys(data.raw_results)) {
+        const r = data.raw_results[key];
+        if (r && r.file_path) return r.file_path;
+      }
+      return null;
+    }
 
-                        if (relativePath) {
-                            const btn = document.createElement('a');
-                            btn.href = `http://127.0.0.1:8000${relativePath}`;
-                            btn.target = "_blank";
-                            btn.className = "mt-3 block bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2 px-3 rounded flex items-center justify-center gap-2 transition";
-                            btn.innerHTML = `<span>📥 下载生成的文件</span>`;
-                            div.appendChild(btn);
-                        }
-                    }
-                });
-            }
-            
-            wrapper.appendChild(div);
-            chatMessages.appendChild(wrapper);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
+    function toRelativePath(fp) {
+      // 将绝对路径转为相对 /artifacts/... 路径
+      const idx = fp.replace(/\\/g, '/').indexOf('artifacts');
+      if (idx === -1) return null;
+      return '/' + fp.replace(/\\/g, '/').slice(idx);
+    }
 
-        async function sendQuery(queryText) {
-            const text = queryText || userInput.value.trim();
-            if (!text) return;
+    function renderTools(data) {
+      if (!data.tool_calls || data.tool_calls.length === 0) {
+        toolsBody.innerHTML = '<span class="placeholder-text">本次未调用工具</span>';
+        return;
+      }
+      toolsBody.innerHTML = '';
+      data.tool_calls.forEach(call => {
+        const entry = document.createElement('div');
+        entry.className = 'tool-entry';
+        const name = document.createElement('div');
+        name.className = 'tool-name';
+        name.textContent = call.tool;
+        const params = document.createElement('div');
+        params.className = 'tool-params';
+        params.textContent = JSON.stringify(call.params, null, 2);
+        entry.appendChild(name);
+        entry.appendChild(params);
+        toolsBody.appendChild(entry);
+      });
+    }
 
-            if (!queryText) userInput.value = '';
-            
-            appendMessage('user', text);
-            
-            // UI 状态
-            sendBtn.disabled = true;
-            loadingSpinner.classList.remove('hidden');
-            reasoningText.textContent = "Agent 正在思考中...";
-            toolsData.textContent = "正在调用工具...";
+    function renderReasoning(data) {
+      reasoningBody.innerHTML = '';
+      if (data.reasoning) {
+        reasoningBody.textContent = data.reasoning;
+      } else {
+        reasoningBody.innerHTML = '<span class="placeholder-text">无推理记录</span>';
+      }
+    }
 
-            try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: text })
-                });
+    // ── Send ──────────────────────────────────────────────────
+    async function sendQuery(preset) {
+      const text = preset || inputEl.value.trim();
+      if (!text) return;
 
-                if (response.ok) {
-                    const data = await response.json();
-                    
-                    // 1. 显示回答
-                    appendMessage('agent', data.answer, data);
-                    
-                    // 2. 显示推理
-                    reasoningText.textContent = data.reasoning || "无推理记录";
-                    
-                    // 3. 显示工具调用
-                    if (data.tool_calls && data.tool_calls.length > 0) {
-                        toolsData.innerHTML = '';
-                        data.tool_calls.forEach(call => {
-                            const pre = document.createElement('pre');
-                            pre.className = "mb-4 border-b border-gray-700 pb-2";
-                            pre.innerHTML = `<span class="text-blue-300">[Tool]</span> ${call.tool}\n<span class="text-gray-400">[Params]</span> ${JSON.stringify(call.params, null, 2)}`;
-                            toolsData.appendChild(pre);
-                        });
-                    } else {
-                        toolsData.textContent = "本次请求未调用外部工具";
-                    }
-                } else {
-                    appendMessage('agent', `错误: ${response.status} ${response.statusText}`);
-                }
-            } catch (error) {
-                appendMessage('agent', `无法连接到服务器: ${error.message}`);
-                console.error(error);
-            } finally {
-                sendBtn.disabled = false;
-                loadingSpinner.classList.add('hidden');
-            }
-        }
+      inputEl.value = '';
+      appendMsg('user', text);
+      appendThinking();
+      setLoading(true);
 
-        sendBtn.addEventListener('click', () => sendQuery());
-        userInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendQuery();
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: text }),
         });
-    </script>
+
+        removeThinking();
+
+        if (!res.ok) {
+          appendMsg('agent', `请求失败：${res.status} ${res.statusText}`);
+          return;
+        }
+
+        const data = await res.json();
+        renderAgentMsg(data);
+        renderTools(data);
+        renderReasoning(data);
+
+      } catch (err) {
+        removeThinking();
+        appendMsg('agent', `无法连接到服务器：${err.message}`);
+      } finally {
+        setLoading(false);
+        inputEl.focus();
+      }
+    }
+
+    // Enter to send
+    inputEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendQuery();
+      }
+    });
+
+    // Focus on load
+    inputEl.focus();
+  </script>
 </body>
 </html>
