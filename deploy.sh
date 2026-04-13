@@ -83,17 +83,25 @@ download_file() {
     local url="${RELEASE_URL}/${filename}"
     local dest="${DOWNLOAD_DIR}/${filename}"
 
-    if [ -f "$dest" ]; then
-        warn "${filename} 已存在，跳过下载"
-        return 0
-    fi
+    local max_retries=10
+    local attempt=0
 
-    info "下载 ${filename}..."
-    if curl -L --progress-bar -o "$dest" "$url"; then
-        success "${filename} 下载完成"
-    else
-        error "下载失败：${url}"
-    fi
+    while [ $attempt -lt $max_retries ]; do
+        attempt=$((attempt + 1))
+        info "下载 ${filename}（第 ${attempt} 次尝试）..."
+        if curl -L --progress-bar -C - -o "$dest" "$url"; then
+            success "${filename} 下载完成"
+            return 0
+        else
+            local exit_code=$?
+            if [ $attempt -lt $max_retries ]; then
+                warn "下载中断（exit ${exit_code}），5 秒后断点续传..."
+                sleep 5
+            else
+                error "下载失败（已重试 ${max_retries} 次）：${url}"
+            fi
+        fi
+    done
 }
 
 for file in "${RELEASE_FILES[@]}"; do
@@ -176,7 +184,8 @@ cd "$RAGFLOW_DIR"
 docker compose down
 cd ..
 
-EXPORT_ABS="$(cd "$DOWNLOAD_DIR" && pwd)"
+# 使用 Windows 格式路径以兼容 Docker Desktop on Windows
+EXPORT_ABS="$(cd "$DOWNLOAD_DIR" && pwd -W 2>/dev/null || pwd)"
 
 info "创建数据卷..."
 docker volume create docker_mysql_data 2>/dev/null || true
@@ -185,19 +194,19 @@ docker volume create docker_minio_data 2>/dev/null || true
 docker volume create docker_redis_data 2>/dev/null || true
 
 info "导入 MySQL 数据..."
-docker run --rm -v docker_mysql_data:/data -v "${EXPORT_ABS}:/backup:ro" alpine sh -c "cd /data && tar xzf /backup/vol_mysql.tar.gz"
+MSYS_NO_PATHCONV=1 docker run --rm -v "docker_mysql_data:/data" -v "${EXPORT_ABS}:/backup:ro" alpine sh -c "cd /data && tar xzf /backup/vol_mysql.tar.gz"
 success "MySQL 数据导入完成"
 
 info "导入 Elasticsearch 数据..."
-docker run --rm -v docker_esdata01:/data -v "${EXPORT_ABS}:/backup:ro" alpine sh -c "cd /data && tar xzf /backup/vol_es.tar.gz"
+MSYS_NO_PATHCONV=1 docker run --rm -v "docker_esdata01:/data" -v "${EXPORT_ABS}:/backup:ro" alpine sh -c "cd /data && tar xzf /backup/vol_es.tar.gz"
 success "Elasticsearch 数据导入完成"
 
 info "导入 MinIO 数据..."
-docker run --rm -v docker_minio_data:/data -v "${EXPORT_ABS}:/backup:ro" alpine sh -c "cd /data && tar xzf /backup/vol_minio.tar.gz"
+MSYS_NO_PATHCONV=1 docker run --rm -v "docker_minio_data:/data" -v "${EXPORT_ABS}:/backup:ro" alpine sh -c "cd /data && tar xzf /backup/vol_minio.tar.gz"
 success "MinIO 数据导入完成"
 
 info "导入 Redis 数据..."
-docker run --rm -v docker_redis_data:/data -v "${EXPORT_ABS}:/backup:ro" alpine sh -c "cd /data && tar xzf /backup/vol_redis.tar.gz"
+MSYS_NO_PATHCONV=1 docker run --rm -v "docker_redis_data:/data" -v "${EXPORT_ABS}:/backup:ro" alpine sh -c "cd /data && tar xzf /backup/vol_redis.tar.gz"
 success "Redis 数据导入完成"
 
 info "重新启动 RAGFlow..."
