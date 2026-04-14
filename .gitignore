@@ -35,9 +35,9 @@ grain_agent/
 *~
 
 # Environment variables
-.env
-.env.local
-.env.*.local
+/.env
+/.env.local
+/.env.*.local
 
 # Logs
 *.log
@@ -53,7 +53,7 @@ Thumbs.db
 *.sqlite3
 data/chroma_db/
 release_parts/
-ragflow_docker/
+ragflow_docker/ragflow-logs/
 ragflow_export/
 
 # Server runtime files
