@@ -25,10 +25,9 @@ $ENV_EXAMPLE  = Join-Path $PROJECT_ROOT ".env.example"
 
 $RAGFLOW_IMAGE   = "infiniflow/ragflow:v0.24.0"
 
-# GitHub Release 下载配置
-$GITHUB_REPO    = "LaFlame111/grain-agent"
+# GitCode Release 下载配置
 $RELEASE_TAG    = "v2.0.0"
-$RELEASE_URL    = "https://github.com/$GITHUB_REPO/releases/download/$RELEASE_TAG"
+$RELEASE_URL    = "https://gitcode.com/api/v5/repos/yekindarly/main/releases/$RELEASE_TAG/attach_files"
 $RELEASE_FILES  = @(
     "images.tar.part-aa",
     "images.tar.part-ab",
@@ -405,7 +404,7 @@ if ($needDownload) {
             continue
         }
 
-        $url = "$RELEASE_URL/$f"
+        $url = "$RELEASE_URL/$f/download"
         $downloaded = $false
 
         for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {

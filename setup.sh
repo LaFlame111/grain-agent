@@ -26,9 +26,8 @@ MYSQL_USER="root"
 MYSQL_PASS="infini_rag_flow"
 MYSQL_DB="rag_flow"
 
-GITHUB_REPO="LaFlame111/grain-agent"
 RELEASE_TAG="v2.0.0"
-RELEASE_URL="https://github.com/$GITHUB_REPO/releases/download/$RELEASE_TAG"
+RELEASE_URL="https://gitcode.com/api/v5/repos/yekindarly/main/releases/$RELEASE_TAG/attach_files"
 RELEASE_FILES=(
     "images.tar.part-aa"
     "images.tar.part-ab"
@@ -251,7 +250,7 @@ for f in "${RELEASE_FILES[@]}"; do
 done
 
 if $need_download; then
-    log INFO "从 GitHub Releases ($RELEASE_TAG) 下载文件..."
+    log INFO "从 GitCode Releases ($RELEASE_TAG) 下载文件..."
     max_retries=3
 
     for f in "${RELEASE_FILES[@]}"; do
@@ -261,7 +260,7 @@ if $need_download; then
             continue
         fi
 
-        url="$RELEASE_URL/$f"
+        url="$RELEASE_URL/$f/download"
         downloaded=false
 
         for attempt in $(seq 1 $max_retries); do
